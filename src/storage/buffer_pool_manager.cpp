@@ -143,13 +143,14 @@ bool BufferPoolManager::delete_page(PageId page_id) {
     if (page->pin_count_ != 0) {
         return false;
     }
-    replacer_->pin(it->second);
+    frame_id_t frame_id = it->second;
+    replacer_->pin(frame_id);
     page_table_.erase(it);
     page->reset_memory();
     page->id_ = PageId{page_id.fd, INVALID_PAGE_ID};
     page->is_dirty_ = false;
     page->pin_count_ = 0;
-    free_list_.push_back(it->second);
+    free_list_.push_back(frame_id);
     disk_manager_->deallocate_page(page_id.page_no);
     return true;
 }

@@ -1,3 +1,7 @@
 doc/*
 !doc/
 !doc/任务清单.md
+
+build/
+BufferPoolManagerTest_db/
+*.DS_Store
