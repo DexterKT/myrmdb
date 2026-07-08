@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <memory>
 #include <string>
 #include <vector>
+#include "common/common.h"
 #include "parser/ast.h"
 
 #include "parser/parser.h"
@@ -139,7 +140,8 @@ class DMLPlan : public Plan
     public:
         DMLPlan(PlanTag tag, std::shared_ptr<Plan> subplan,std::string tab_name,
                 std::vector<Value> values, std::vector<Condition> conds,
-                std::vector<SetClause> set_clauses)
+                std::vector<SetClause> set_clauses,
+                std::vector<AggregateCall> aggregates = {})
         {
             Plan::tag = tag;
             subplan_ = std::move(subplan);
@@ -147,6 +149,7 @@ class DMLPlan : public Plan
             values_ = std::move(values);
             conds_ = std::move(conds);
             set_clauses_ = std::move(set_clauses);
+            aggregates_ = std::move(aggregates);
         }
         ~DMLPlan(){}
         std::shared_ptr<Plan> subplan_;
@@ -154,6 +157,7 @@ class DMLPlan : public Plan
         std::vector<Value> values_;
         std::vector<Condition> conds_;
         std::vector<SetClause> set_clauses_;
+        std::vector<AggregateCall> aggregates_;
 };
 
 // ddl语句, 包括create/drop table; create/drop index;

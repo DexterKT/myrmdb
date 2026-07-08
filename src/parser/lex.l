@@ -74,6 +74,11 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "UPDATE" { return UPDATE; }
 "SET" { return SET; }
 "SELECT" { return SELECT; }
+"COUNT" { return COUNT; }
+"SUM" { return SUM; }
+"MAX" { return MAX; }
+"MIN" { return MIN; }
+"AS" { return AS; }
 "INT" { return INT; }
 "BIGINT" { return BIGINT; }
 "DATETIME" { return DATETIME; }

@@ -23,6 +23,7 @@ using namespace ast;
 // keywords
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
 WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY
+%token COUNT SUM MAX MIN AS
 // non-keywords
 %token LEQ NEQ GEQ T_EOF
 
@@ -41,8 +42,8 @@ WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP 
 %type <sv_vals> valueList
 %type <sv_str> tbName colName
 %type <sv_strs> tableList colNameList
-%type <sv_col> col
-%type <sv_cols> colList selector
+%type <sv_col> col aggregate
+%type <sv_cols> colList selector aggregateList
 %type <sv_set_clause> setClause
 %type <sv_set_clauses> setClauses
 %type <sv_cond> condition
@@ -341,6 +342,41 @@ selector:
         $$ = {};
     }
     |   colList
+    |   aggregateList
+    ;
+
+aggregateList:
+        aggregate
+    {
+        $$ = std::vector<std::shared_ptr<Col>>{$1};
+    }
+    |   aggregateList ',' aggregate
+    {
+        $$.push_back($3);
+    }
+    ;
+
+aggregate:
+        COUNT '(' '*' ')' AS colName
+    {
+        $$ = std::make_shared<Col>(AGG_COUNT, "", "", $6, true);
+    }
+    |   COUNT '(' col ')' AS colName
+    {
+        $$ = std::make_shared<Col>(AGG_COUNT, $3->tab_name, $3->col_name, $6, false);
+    }
+    |   SUM '(' col ')' AS colName
+    {
+        $$ = std::make_shared<Col>(AGG_SUM, $3->tab_name, $3->col_name, $6, false);
+    }
+    |   MAX '(' col ')' AS colName
+    {
+        $$ = std::make_shared<Col>(AGG_MAX, $3->tab_name, $3->col_name, $6, false);
+    }
+    |   MIN '(' col ')' AS colName
+    {
+        $$ = std::make_shared<Col>(AGG_MIN, $3->tab_name, $3->col_name, $6, false);
+    }
     ;
 
 tableList:

@@ -401,10 +401,12 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
     } else if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse)) {
 
         std::shared_ptr<plannerInfo> root = std::make_shared<plannerInfo>(x);
+        auto aggregates = query->aggregates;
         // 生成select语句的查询执行计划
         std::shared_ptr<Plan> projection = generate_select_plan(std::move(query), context);
         plannerRoot = std::make_shared<DMLPlan>(T_select, projection, std::string(), std::vector<Value>(),
-                                                    std::vector<Condition>(), std::vector<SetClause>());
+                                                    std::vector<Condition>(), std::vector<SetClause>(),
+                                                    aggregates);
     } else {
         throw InternalError("Unexpected AST root");
     }

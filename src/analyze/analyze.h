@@ -34,6 +34,8 @@ class Query{
     std::vector<SetClause> set_clauses;
     //insert 的values值
     std::vector<Value> values;
+    // select 聚合函数
+    std::vector<AggregateCall> aggregates;
 
     Query(){}
 
@@ -57,4 +59,3 @@ private:
     Value convert_sv_value(const std::shared_ptr<ast::Value> &sv_val);
     CompOp convert_sv_comp_op(ast::SvCompOp op);
 };
-

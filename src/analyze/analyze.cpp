@@ -20,6 +20,16 @@ bool coerce_value_to_col_type(Value &value, ColType target_type) {
     return value.coerce_to(target_type);
 }
 
+AggType convert_agg_type(ast::AggFuncType type) {
+    switch (type) {
+        case ast::AGG_COUNT: return AGG_COUNT;
+        case ast::AGG_SUM: return AGG_SUM;
+        case ast::AGG_MAX: return AGG_MAX;
+        case ast::AGG_MIN: return AGG_MIN;
+    }
+    throw InternalError("Unexpected aggregate type");
+}
+
 int64_t parse_int64_literal(const std::string &text) {
     size_t pos = 0;
     long long value = 0;
@@ -54,24 +64,59 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             }
         }
 
-        // 处理target list，再target list中添加上表名，例如 a.id
-        for (auto &sv_sel_col : x->cols) {
-            TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
-            query->cols.push_back(sel_col);
-        }
-        
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
-        if (query->cols.empty()) {
-            // select all columns
-            for (auto &col : all_cols) {
-                TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
-                query->cols.push_back(sel_col);
+
+        bool has_aggregate = false;
+        bool has_normal_col = false;
+        for (auto &sv_sel_col : x->cols) {
+            if (sv_sel_col->is_agg) {
+                has_aggregate = true;
+            } else {
+                has_normal_col = true;
+            }
+        }
+        if (has_aggregate && has_normal_col) {
+            throw InternalError("Cannot mix aggregate functions and normal columns");
+        }
+
+        if (has_aggregate) {
+            for (auto &sv_sel_col : x->cols) {
+                AggregateCall agg;
+                agg.type = convert_agg_type(sv_sel_col->agg_type);
+                agg.alias = sv_sel_col->alias;
+                agg.count_star = sv_sel_col->count_star;
+                if (!agg.count_star) {
+                    agg.col = check_column(all_cols, TabCol{.tab_name = sv_sel_col->tab_name,
+                                                            .col_name = sv_sel_col->col_name});
+                    auto col_meta = std::find_if(all_cols.begin(), all_cols.end(), [&](const ColMeta &col) {
+                        return col.tab_name == agg.col.tab_name && col.name == agg.col.col_name;
+                    });
+                    if (agg.type == AGG_SUM && col_meta->type != TYPE_INT && col_meta->type != TYPE_FLOAT &&
+                        col_meta->type != TYPE_BIGINT) {
+                        throw IncompatibleTypeError("SUM", coltype2str(col_meta->type));
+                    }
+                    query->cols.push_back(agg.col);
+                }
+                query->aggregates.push_back(agg);
             }
         } else {
-            // infer table name from column name
-            for (auto &sel_col : query->cols) {
-                sel_col = check_column(all_cols, sel_col);  // 列元数据校验
+            // 处理target list，再target list中添加上表名，例如 a.id
+            for (auto &sv_sel_col : x->cols) {
+                TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
+                query->cols.push_back(sel_col);
+            }
+            if (query->cols.empty()) {
+                // select all columns
+                for (auto &col : all_cols) {
+                    TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
+                    query->cols.push_back(sel_col);
+                }
+            } else {
+                // infer table name from column name
+                for (auto &sel_col : query->cols) {
+                    sel_col = check_column(all_cols, sel_col);  // 列元数据校验
+                }
             }
         }
         //处理where条件

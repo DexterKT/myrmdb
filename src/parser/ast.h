@@ -32,6 +32,13 @@ enum OrderByDir {
     OrderBy_DESC
 };
 
+enum AggFuncType {
+    AGG_COUNT,
+    AGG_SUM,
+    AGG_MAX,
+    AGG_MIN
+};
+
 // Base class for tree nodes
 struct TreeNode {
     virtual ~TreeNode() = default;  // enable polymorphism
@@ -142,9 +149,21 @@ struct StringLit : public Value {
 struct Col : public Expr {
     std::string tab_name;
     std::string col_name;
+    bool is_agg = false;
+    AggFuncType agg_type;
+    std::string alias;
+    bool count_star = false;
 
     Col(std::string tab_name_, std::string col_name_) :
             tab_name(std::move(tab_name_)), col_name(std::move(col_name_)) {}
+
+    Col(AggFuncType agg_type_, std::string tab_name_, std::string col_name_, std::string alias_, bool count_star_) :
+            tab_name(std::move(tab_name_)),
+            col_name(std::move(col_name_)),
+            is_agg(true),
+            agg_type(agg_type_),
+            alias(std::move(alias_)),
+            count_star(count_star_) {}
 };
 
 struct SetClause : public TreeNode {

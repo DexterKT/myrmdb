@@ -10,6 +10,9 @@ See the Mulan PSL v2 for more details. */
 
 #include "execution_manager.h"
 
+#include <iomanip>
+#include <sstream>
+
 #include "executor_delete.h"
 #include "executor_index_scan.h"
 #include "executor_insert.h"
@@ -43,7 +46,75 @@ const char *help_info = "Supported SQL syntax:\n"
                    "op:\n"
                    "  {= | <> | < | > | <= | >=}\n"
                    "selector:\n"
-                   "  {* | column [, column ...]}\n";
+                   "  {* | column [, column ...] | aggregate(column) AS alias [, ...]}\n";
+
+namespace {
+
+std::string format_column_value(const ColMeta &col, const char *rec_buf) {
+    if (col.type == TYPE_INT) {
+        return std::to_string(*(int *)rec_buf);
+    }
+    if (col.type == TYPE_FLOAT) {
+        return std::to_string(*(float *)rec_buf);
+    }
+    if (col.type == TYPE_BIGINT) {
+        return std::to_string(*(int64_t *)rec_buf);
+    }
+    if (col.type == TYPE_DATETIME) {
+        return format_datetime_value(*(int64_t *)rec_buf);
+    }
+    std::string col_str((char *)rec_buf, col.len);
+    col_str.resize(strlen(col_str.c_str()));
+    return col_str;
+}
+
+std::string format_float_fixed(double value) {
+    std::ostringstream os;
+    os << std::fixed << std::setprecision(6) << value;
+    return os.str();
+}
+
+struct AggregateState {
+    AggregateCall call;
+    ColMeta col;
+    bool initialized = false;
+    int64_t count = 0;
+    int64_t int_sum = 0;
+    double float_sum = 0;
+    std::string best_raw;
+};
+
+std::vector<std::string> finalize_aggregates(const std::vector<AggregateState> &states) {
+    std::vector<std::string> row;
+    row.reserve(states.size());
+    for (const auto &state : states) {
+        switch (state.call.type) {
+            case AGG_COUNT:
+                row.push_back(std::to_string(state.count));
+                break;
+            case AGG_SUM:
+                if (state.col.type == TYPE_FLOAT) {
+                    row.push_back(format_float_fixed(state.float_sum));
+                } else {
+                    row.push_back(std::to_string(state.int_sum));
+                }
+                break;
+            case AGG_MAX:
+            case AGG_MIN:
+                if (!state.initialized) {
+                    row.emplace_back("");
+                } else if (state.col.type == TYPE_FLOAT) {
+                    row.push_back(format_float_fixed(*(float *)state.best_raw.data()));
+                } else {
+                    row.push_back(format_column_value(state.col, state.best_raw.data()));
+                }
+                break;
+        }
+    }
+    return row;
+}
+
+}
 
 // 主要负责执行DDL语句
 void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context){
@@ -134,8 +205,81 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
 }
 
 // 执行select语句，select语句的输出除了需要返回客户端外，还需要写入output.txt文件中
-void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols, 
-                            Context *context) {
+void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
+                            std::vector<AggregateCall> aggregates, Context *context) {
+    if (!aggregates.empty()) {
+        std::vector<std::string> captions;
+        captions.reserve(aggregates.size());
+        std::vector<AggregateState> states;
+        states.reserve(aggregates.size());
+        for (const auto &agg : aggregates) {
+            captions.push_back(agg.alias);
+            AggregateState state;
+            state.call = agg;
+            if (!agg.count_star) {
+                state.col = executorTreeRoot->get_col_offset(agg.col);
+            }
+            states.push_back(std::move(state));
+        }
+
+        RecordPrinter rec_printer(captions.size());
+        rec_printer.print_separator(context);
+        rec_printer.print_record(captions, context);
+        rec_printer.print_separator(context);
+
+        std::fstream outfile;
+        outfile.open("output.txt", std::ios::out | std::ios::app);
+        outfile << "|";
+        for (const auto &caption : captions) {
+            outfile << " " << caption << " |";
+        }
+        outfile << "\n";
+
+        for (executorTreeRoot->beginTuple(); !executorTreeRoot->is_end(); executorTreeRoot->nextTuple()) {
+            auto tuple = executorTreeRoot->Next();
+            for (auto &state : states) {
+                if (state.call.type == AGG_COUNT) {
+                    state.count++;
+                    continue;
+                }
+
+                char *rec_buf = tuple->data + state.col.offset;
+                if (state.call.type == AGG_SUM) {
+                    if (state.col.type == TYPE_FLOAT) {
+                        state.float_sum += *(float *)rec_buf;
+                    } else if (state.col.type == TYPE_BIGINT) {
+                        state.int_sum += *(int64_t *)rec_buf;
+                    } else {
+                        state.int_sum += *(int *)rec_buf;
+                    }
+                    continue;
+                }
+
+                if (!state.initialized) {
+                    state.best_raw.assign(rec_buf, state.col.len);
+                    state.initialized = true;
+                    continue;
+                }
+                int cmp = compare_raw_value(rec_buf, state.best_raw.data(), state.col.type, state.col.len);
+                if ((state.call.type == AGG_MAX && cmp > 0) || (state.call.type == AGG_MIN && cmp < 0)) {
+                    state.best_raw.assign(rec_buf, state.col.len);
+                }
+            }
+        }
+
+        auto row = finalize_aggregates(states);
+        rec_printer.print_record(row, context);
+        outfile << "|";
+        for (const auto &col : row) {
+            outfile << " " << col << " |";
+        }
+        outfile << "\n";
+        outfile.close();
+        rec_printer.print_separator(context);
+        RecordPrinter::print_record_count(1, context);
+        return;
+    }
+
     std::vector<std::string> captions;
     captions.reserve(sel_cols.size());
     for (auto &sel_col : sel_cols) {
