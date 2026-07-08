@@ -42,7 +42,7 @@ class UpdateExecutor : public AbstractExecutor {
             auto rec = fh_->get_record(rid, context_);
             for (auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
-                if (col->type != set_clause.rhs.type) {
+                if (!set_clause.rhs.coerce_to(col->type)) {
                     throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs.type));
                 }
                 if (set_clause.rhs.raw == nullptr) {

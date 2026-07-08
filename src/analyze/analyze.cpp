@@ -11,7 +11,47 @@ See the Mulan PSL v2 for more details. */
 #include "analyze.h"
 
 #include <algorithm>
+#include <limits>
 #include <map>
+
+namespace {
+
+bool coerce_value_to_col_type(Value &value, ColType target_type) {
+    if (value.type == target_type) {
+        return true;
+    }
+    if (target_type == TYPE_FLOAT && value.type == TYPE_INT) {
+        value.set_float(static_cast<float>(value.int_val));
+        return true;
+    }
+    if (target_type == TYPE_BIGINT && value.type == TYPE_INT) {
+        value.set_bigint(static_cast<int64_t>(value.int_val));
+        return true;
+    }
+    if (target_type == TYPE_INT && value.type == TYPE_BIGINT &&
+        value.bigint_val >= std::numeric_limits<int>::min() &&
+        value.bigint_val <= std::numeric_limits<int>::max()) {
+        value.set_int(static_cast<int>(value.bigint_val));
+        return true;
+    }
+    return false;
+}
+
+int64_t parse_int64_literal(const std::string &text) {
+    size_t pos = 0;
+    long long value = 0;
+    try {
+        value = std::stoll(text, &pos, 10);
+    } catch (const std::exception &) {
+        throw InternalError("Invalid BIGINT value");
+    }
+    if (pos != text.size()) {
+        throw InternalError("Invalid BIGINT value");
+    }
+    return static_cast<int64_t>(value);
+}
+
+}
 
 /**
  * @description: 分析器，进行语义分析和查询重写，需要检查不符合语义规定的部分
@@ -66,7 +106,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             set_clause.lhs = check_column(all_cols, TabCol{.tab_name = x->tab_name, .col_name = sv_set_clause->col_name});
             set_clause.rhs = convert_sv_value(sv_set_clause->val);
             auto col = sm_manager_->db_.get_table(set_clause.lhs.tab_name).get_col(set_clause.lhs.col_name);
-            if (col->type != set_clause.rhs.type) {
+            if (!coerce_value_to_col_type(set_clause.rhs, col->type)) {
                 throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs.type));
             }
             query->set_clauses.push_back(set_clause);
@@ -164,8 +204,8 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         ColType lhs_type = lhs_col->type;
         ColType rhs_type;
         if (cond.is_rhs_val) {
-            if (lhs_type == TYPE_FLOAT && cond.rhs_val.type == TYPE_INT) {
-                cond.rhs_val.set_float(static_cast<float>(cond.rhs_val.int_val));
+            if (!coerce_value_to_col_type(cond.rhs_val, lhs_type)) {
+                throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(cond.rhs_val.type));
             }
             cond.rhs_val.init_raw(lhs_col->len);
             rhs_type = cond.rhs_val.type;
@@ -184,7 +224,12 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
 Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
     Value val;
     if (auto int_lit = std::dynamic_pointer_cast<ast::IntLit>(sv_val)) {
-        val.set_int(int_lit->val);
+        int64_t int_val = parse_int64_literal(int_lit->val);
+        if (int_val >= std::numeric_limits<int>::min() && int_val <= std::numeric_limits<int>::max()) {
+            val.set_int(static_cast<int>(int_val));
+        } else {
+            val.set_bigint(int_val);
+        }
     } else if (auto float_lit = std::dynamic_pointer_cast<ast::FloatLit>(sv_val)) {
         val.set_float(float_lit->val);
     } else if (auto str_lit = std::dynamic_pointer_cast<ast::StringLit>(sv_val)) {

@@ -30,6 +30,11 @@ inline int compare_raw_value(const char *lhs, const char *rhs, ColType type, int
         float rhs_val = *reinterpret_cast<const float *>(rhs);
         return (lhs_val > rhs_val) - (lhs_val < rhs_val);
     }
+    if (type == TYPE_BIGINT) {
+        int64_t lhs_val = *reinterpret_cast<const int64_t *>(lhs);
+        int64_t rhs_val = *reinterpret_cast<const int64_t *>(rhs);
+        return (lhs_val > rhs_val) - (lhs_val < rhs_val);
+    }
     return std::strncmp(lhs, rhs, len);
 }
 

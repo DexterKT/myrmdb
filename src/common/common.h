@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 
 #include <cassert>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -33,6 +34,7 @@ struct Value {
     union {
         int int_val;      // int value
         float float_val;  // float value
+        int64_t bigint_val;  // bigint value
     };
     std::string str_val;  // string value
 
@@ -48,9 +50,35 @@ struct Value {
         float_val = float_val_;
     }
 
+    void set_bigint(int64_t bigint_val_) {
+        type = TYPE_BIGINT;
+        bigint_val = bigint_val_;
+    }
+
     void set_str(std::string str_val_) {
         type = TYPE_STRING;
         str_val = std::move(str_val_);
+    }
+
+    bool coerce_to(ColType target_type) {
+        if (type == target_type) {
+            return true;
+        }
+        if (target_type == TYPE_FLOAT && type == TYPE_INT) {
+            set_float(static_cast<float>(int_val));
+            return true;
+        }
+        if (target_type == TYPE_BIGINT && type == TYPE_INT) {
+            set_bigint(static_cast<int64_t>(int_val));
+            return true;
+        }
+        if (target_type == TYPE_INT && type == TYPE_BIGINT &&
+            bigint_val >= std::numeric_limits<int>::min() &&
+            bigint_val <= std::numeric_limits<int>::max()) {
+            set_int(static_cast<int>(bigint_val));
+            return true;
+        }
+        return false;
     }
 
     void init_raw(int len) {
@@ -62,6 +90,9 @@ struct Value {
         } else if (type == TYPE_FLOAT) {
             assert(len == sizeof(float));
             *(float *)(raw->data) = float_val;
+        } else if (type == TYPE_BIGINT) {
+            assert(len == sizeof(int64_t));
+            *(int64_t *)(raw->data) = bigint_val;
         } else if (type == TYPE_STRING) {
             if (len < (int)str_val.size()) {
                 throw StringOverflowError();
