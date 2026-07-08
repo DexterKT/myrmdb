@@ -17,24 +17,7 @@ See the Mulan PSL v2 for more details. */
 namespace {
 
 bool coerce_value_to_col_type(Value &value, ColType target_type) {
-    if (value.type == target_type) {
-        return true;
-    }
-    if (target_type == TYPE_FLOAT && value.type == TYPE_INT) {
-        value.set_float(static_cast<float>(value.int_val));
-        return true;
-    }
-    if (target_type == TYPE_BIGINT && value.type == TYPE_INT) {
-        value.set_bigint(static_cast<int64_t>(value.int_val));
-        return true;
-    }
-    if (target_type == TYPE_INT && value.type == TYPE_BIGINT &&
-        value.bigint_val >= std::numeric_limits<int>::min() &&
-        value.bigint_val <= std::numeric_limits<int>::max()) {
-        value.set_int(static_cast<int>(value.bigint_val));
-        return true;
-    }
-    return false;
+    return value.coerce_to(target_type);
 }
 
 int64_t parse_int64_literal(const std::string &text) {
