@@ -11,6 +11,8 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include <map>
+#include <memory>
+#include <unordered_set>
 #include <unordered_map>
 #include "log_manager.h"
 #include "storage/disk_manager.h"
@@ -35,6 +37,9 @@ public:
     void redo();
     void undo();
 private:
+    std::vector<std::unique_ptr<LogRecord>> logs_;
+    std::unordered_set<txn_id_t> committed_txns_;
+    std::unordered_set<txn_id_t> active_txns_;
     LogBuffer buffer_;                                              // 读入日志
     DiskManager* disk_manager_;                                     // 用来读写文件
     BufferPoolManager* buffer_pool_manager_;                        // 对页面进行读写

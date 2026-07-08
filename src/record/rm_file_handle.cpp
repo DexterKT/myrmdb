@@ -118,6 +118,11 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
 
+void RmFileHandle::flush() {
+    disk_manager_->write_page(fd_, RM_FILE_HDR_PAGE, reinterpret_cast<char *>(&file_hdr_), sizeof(file_hdr_));
+    buffer_pool_manager_->flush_all_pages(fd_);
+}
+
 RmPageHandle RmFileHandle::fetch_page_handle(int page_no) const {
     if (page_no < RM_FIRST_RECORD_PAGE || page_no >= file_hdr_.num_pages) {
         throw PageNotExistError(disk_manager_->get_file_name(fd_), page_no);

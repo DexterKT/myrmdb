@@ -38,6 +38,7 @@ class InsertExecutor : public AbstractExecutor {
     };
 
     std::unique_ptr<RmRecord> Next() override {
+        context_->lock_mgr_->lock_exclusive_on_table(context_->txn_, fh_->GetFd());
         // Make record buffer
         RmRecord rec(fh_->get_file_hdr().record_size);
         for (size_t i = 0; i < values_.size(); i++) {
@@ -53,6 +54,16 @@ class InsertExecutor : public AbstractExecutor {
 
         // Insert into record file
         rid_ = fh_->insert_record(rec.data, context_);
+        if (context_->txn_ != nullptr) {
+            context_->txn_->append_write_record(new WriteRecord(WType::INSERT_TUPLE, tab_name_, rid_));
+        }
+        if (context_->log_mgr_ != nullptr && context_->txn_ != nullptr) {
+            InsertLogRecord log_record(context_->txn_->get_transaction_id(), rec, rid_, tab_name_);
+            log_record.prev_lsn_ = context_->txn_->get_prev_lsn();
+            lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&log_record);
+            context_->txn_->set_prev_lsn(lsn);
+            context_->log_mgr_->flush_log_to_disk();
+        }
         sm_manager_->insert_index_entries(tab_name_, &rec, rid_);
         return nullptr;
     }

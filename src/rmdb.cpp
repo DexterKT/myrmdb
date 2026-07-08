@@ -166,6 +166,11 @@ void *client_handler(void *sock_fd) {
                     outfile.open("output.txt",std::ios::out | std::ios::app);
                     outfile << "failure\n";
                     outfile.close();
+                    if (context->txn_ != nullptr &&
+                        (context->txn_->get_state() == TransactionState::GROWING ||
+                         context->txn_->get_state() == TransactionState::SHRINKING)) {
+                        txn_manager->abort(context->txn_, log_manager.get());
+                    }
                 }
             }
         } else {
@@ -189,7 +194,9 @@ void *client_handler(void *sock_fd) {
             break;
         }
         // 如果是单挑语句，需要按照一个完整的事务来执行，所以执行完当前语句后，自动提交事务
-        if(context->txn_->get_txn_mode() == false)
+        if(context->txn_->get_txn_mode() == false &&
+           context->txn_->get_state() != TransactionState::ABORTED &&
+           context->txn_->get_state() != TransactionState::COMMITTED)
         {
             txn_manager->commit(context->txn_, context->log_mgr_);
         }

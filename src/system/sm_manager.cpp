@@ -614,6 +614,12 @@ void SmManager::rebuild_runtime_indexes(Context* context) {
     }
 }
 
+void SmManager::flush_all_tables() {
+    for (auto &entry : fhs_) {
+        entry.second->flush();
+    }
+}
+
 SmManager::RuntimeIndex& SmManager::get_runtime_index(const std::string& tab_name,
                                                       const std::vector<std::string>& col_names) {
     auto pos = runtime_indexes_.find(runtime_index_name(tab_name, col_names));

@@ -107,6 +107,10 @@ class SmManager {
     void update_index_entries(const std::string& tab_name, const RmRecord* old_rec, const RmRecord* new_rec,
                               const Rid& rid);
 
+    void rebuild_runtime_indexes(Context* context);
+
+    void flush_all_tables();
+
    private:
     std::string runtime_index_name(const std::string& tab_name, const std::vector<std::string>& col_names) const;
     std::string runtime_index_name(const IndexMeta& index) const;
@@ -116,7 +120,6 @@ class SmManager {
     bool key_equal(const IndexMeta& index, const std::string& lhs, const std::string& rhs) const;
     void sort_runtime_index(RuntimeIndex& runtime_index);
     void rebuild_runtime_index(const IndexMeta& index, Context* context);
-    void rebuild_runtime_indexes(Context* context);
     RuntimeIndex& get_runtime_index(const std::string& tab_name, const std::vector<std::string>& col_names);
     const RuntimeIndex& get_runtime_index(const std::string& tab_name, const std::vector<std::string>& col_names) const;
 };

@@ -38,6 +38,7 @@ class UpdateExecutor : public AbstractExecutor {
         context_ = context;
     }
     std::unique_ptr<RmRecord> Next() override {
+        context_->lock_mgr_->lock_exclusive_on_table(context_->txn_, fh_->GetFd());
         for (const auto &rid : rids_) {
             auto rec = fh_->get_record(rid, context_);
             auto old_rec = std::make_unique<RmRecord>(rec->size);
@@ -51,6 +52,17 @@ class UpdateExecutor : public AbstractExecutor {
                     set_clause.rhs.init_raw(col->len);
                 }
                 memcpy(rec->data + col->offset, set_clause.rhs.raw->data, col->len);
+            }
+            if (context_->log_mgr_ != nullptr && context_->txn_ != nullptr) {
+                Rid log_rid = rid;
+                UpdateLogRecord log_record(context_->txn_->get_transaction_id(), *old_rec, *rec, log_rid, tab_name_);
+                log_record.prev_lsn_ = context_->txn_->get_prev_lsn();
+                lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&log_record);
+                context_->txn_->set_prev_lsn(lsn);
+                context_->log_mgr_->flush_log_to_disk();
+            }
+            if (context_->txn_ != nullptr) {
+                context_->txn_->append_write_record(new WriteRecord(WType::UPDATE_TUPLE, tab_name_, rid, *old_rec));
             }
             sm_manager_->update_index_entries(tab_name_, old_rec.get(), rec.get(), rid);
             fh_->update_record(rid, rec->data, context_);
