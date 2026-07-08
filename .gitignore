@@ -6,4 +6,5 @@ build/
 BufferPoolManagerTest_db/
 codex_t2_db*/
 rmdb_client/build/
+package/
 *.DS_Store
