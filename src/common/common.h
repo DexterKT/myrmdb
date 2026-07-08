@@ -122,6 +122,11 @@ struct AggregateCall {
     bool count_star;
 };
 
+struct SortKey {
+    TabCol col;
+    bool desc;
+};
+
 struct Value {
     ColType type;  // type of value
     union {

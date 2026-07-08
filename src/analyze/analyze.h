@@ -36,6 +36,8 @@ class Query{
     std::vector<Value> values;
     // select 聚合函数
     std::vector<AggregateCall> aggregates;
+    std::vector<SortKey> sort_keys;
+    int limit = -1;
 
     Query(){}
 

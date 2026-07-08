@@ -92,14 +92,15 @@ extern int yydebug;
     MAX = 293,                     /* MAX  */
     MIN = 294,                     /* MIN  */
     AS = 295,                      /* AS  */
-    LEQ = 296,                     /* LEQ  */
-    NEQ = 297,                     /* NEQ  */
-    GEQ = 298,                     /* GEQ  */
-    T_EOF = 299,                   /* T_EOF  */
-    IDENTIFIER = 300,              /* IDENTIFIER  */
-    VALUE_STRING = 301,            /* VALUE_STRING  */
-    VALUE_INT = 302,               /* VALUE_INT  */
-    VALUE_FLOAT = 303              /* VALUE_FLOAT  */
+    LIMIT = 296,                   /* LIMIT  */
+    LEQ = 297,                     /* LEQ  */
+    NEQ = 298,                     /* NEQ  */
+    GEQ = 299,                     /* GEQ  */
+    T_EOF = 300,                   /* T_EOF  */
+    IDENTIFIER = 301,              /* IDENTIFIER  */
+    VALUE_STRING = 302,            /* VALUE_STRING  */
+    VALUE_INT = 303,               /* VALUE_INT  */
+    VALUE_FLOAT = 304              /* VALUE_FLOAT  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif

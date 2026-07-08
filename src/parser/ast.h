@@ -191,6 +191,12 @@ struct OrderBy : public TreeNode
        cols(std::move(cols_)), orderby_dir(std::move(orderby_dir_)) {}
 };
 
+struct OrderByList : public TreeNode
+{
+    std::vector<std::shared_ptr<OrderBy>> items;
+    OrderByList(std::vector<std::shared_ptr<OrderBy>> items_) : items(std::move(items_)) {}
+};
+
 struct InsertStmt : public TreeNode {
     std::string tab_name;
     std::vector<std::shared_ptr<Value>> vals;
@@ -237,15 +243,17 @@ struct SelectStmt : public TreeNode {
 
     
     bool has_sort;
-    std::shared_ptr<OrderBy> order;
+    std::shared_ptr<OrderByList> order;
+    int limit;
 
 
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
                std::vector<std::string> tabs_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
-               std::shared_ptr<OrderBy> order_) :
+               std::shared_ptr<OrderByList> order_,
+               int limit_) :
             cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)), 
-            order(std::move(order_)) {
+            order(std::move(order_)), limit(limit_) {
                 has_sort = (bool)order;
             }
 };
@@ -282,6 +290,7 @@ struct SemValue {
     std::vector<std::shared_ptr<BinaryExpr>> sv_conds;
 
     std::shared_ptr<OrderBy> sv_orderby;
+    std::shared_ptr<OrderByList> sv_orderby_list;
 };
 
 extern std::shared_ptr<ast::TreeNode> parse_tree;

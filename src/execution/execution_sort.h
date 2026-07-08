@@ -9,6 +9,8 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #pragma once
+#include <algorithm>
+
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
@@ -18,25 +20,29 @@ See the Mulan PSL v2 for more details. */
 class SortExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;
-    ColMeta cols_;                              // 框架中只支持一个键排序，需要自行修改数据结构支持多个键排序
+    std::vector<ColMeta> sort_cols_;
+    std::vector<bool> desc_flags_;
     size_t tuple_num;
-    bool is_desc_;
     std::vector<size_t> used_tuple;
     std::unique_ptr<RmRecord> current_tuple;
     std::vector<std::unique_ptr<RmRecord>> tuples_;
     std::vector<ColMeta> out_cols_;
     size_t len_;
     size_t cursor_;
+    int limit_;
 
    public:
-    SortExecutor(std::unique_ptr<AbstractExecutor> prev, TabCol sel_cols, bool is_desc) {
+    SortExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<SortKey> &sort_keys, int limit) {
         prev_ = std::move(prev);
-        cols_ = prev_->get_col_offset(sel_cols);
+        for (const auto &sort_key : sort_keys) {
+            sort_cols_.push_back(prev_->get_col_offset(sort_key.col));
+            desc_flags_.push_back(sort_key.desc);
+        }
         out_cols_ = prev_->cols();
         len_ = prev_->tupleLen();
-        is_desc_ = is_desc;
         tuple_num = 0;
         cursor_ = 0;
+        limit_ = limit;
         used_tuple.clear();
     }
 
@@ -49,10 +55,22 @@ class SortExecutor : public AbstractExecutor {
                 tuples_.push_back(std::move(rec));
             }
         }
-        std::sort(tuples_.begin(), tuples_.end(), [&](const auto &lhs, const auto &rhs) {
-            int cmp = compare_raw_value(lhs->data + cols_.offset, rhs->data + cols_.offset, cols_.type, cols_.len);
-            return is_desc_ ? cmp > 0 : cmp < 0;
-        });
+        if (!sort_cols_.empty()) {
+            std::stable_sort(tuples_.begin(), tuples_.end(), [&](const auto &lhs, const auto &rhs) {
+                for (size_t i = 0; i < sort_cols_.size(); ++i) {
+                    const auto &col = sort_cols_[i];
+                    int cmp = compare_raw_value(lhs->data + col.offset, rhs->data + col.offset, col.type, col.len);
+                    if (cmp == 0) {
+                        continue;
+                    }
+                    return desc_flags_[i] ? cmp > 0 : cmp < 0;
+                }
+                return false;
+            });
+        }
+        if (limit_ >= 0 && tuples_.size() > static_cast<size_t>(limit_)) {
+            tuples_.resize(limit_);
+        }
         tuple_num = tuples_.size();
         cursor_ = 0;
     }

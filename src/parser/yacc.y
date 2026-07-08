@@ -23,7 +23,7 @@ using namespace ast;
 // keywords
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
 WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY
-%token COUNT SUM MAX MIN AS
+%token COUNT SUM MAX MIN AS LIMIT
 // non-keywords
 %token LEQ NEQ GEQ T_EOF
 
@@ -41,6 +41,7 @@ WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP 
 %type <sv_val> value
 %type <sv_vals> valueList
 %type <sv_str> tbName colName
+%type <sv_int> opt_limit_clause
 %type <sv_strs> tableList colNameList
 %type <sv_col> col aggregate
 %type <sv_cols> colList selector aggregateList
@@ -48,7 +49,8 @@ WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP 
 %type <sv_set_clauses> setClauses
 %type <sv_cond> condition
 %type <sv_conds> whereClause optWhereClause
-%type <sv_orderby>  order_clause opt_order_clause
+%type <sv_orderby>  order_clause
+%type <sv_orderby_list>  order_clause_list opt_order_clause
 %type <sv_orderby_dir> opt_asc_desc
 
 %%
@@ -148,9 +150,9 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optWhereClause opt_order_clause
+    |   SELECT selector FROM tableList optWhereClause opt_order_clause opt_limit_clause
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7);
     }
     ;
 
@@ -395,7 +397,7 @@ tableList:
     ;
 
 opt_order_clause:
-    ORDER BY order_clause      
+    ORDER BY order_clause_list
     { 
         $$ = $3; 
     }
@@ -409,11 +411,28 @@ order_clause:
     }
     ;   
 
+order_clause_list:
+      order_clause
+    {
+        $$ = std::make_shared<OrderByList>(std::vector<std::shared_ptr<OrderBy>>{$1});
+    }
+    | order_clause_list ',' order_clause
+    {
+        $1->items.push_back($3);
+        $$ = $1;
+    }
+    ;
+
 opt_asc_desc:
     ASC          { $$ = OrderBy_ASC;     }
     |  DESC      { $$ = OrderBy_DESC;    }
     |       { $$ = OrderBy_DEFAULT; }
     ;    
+
+opt_limit_clause:
+    LIMIT VALUE_INT { $$ = std::stoi($2); }
+    |       { $$ = -1; }
+    ;
 
 tbName: IDENTIFIER;
 

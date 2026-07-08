@@ -122,6 +122,17 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         //处理where条件
         get_clause(x->conds, query->conds);
         check_clause(query->tables, query->conds);
+
+        query->limit = x->limit;
+        if (x->order != nullptr) {
+            for (const auto &order_item : x->order->items) {
+                SortKey sort_key;
+                sort_key.col = check_column(all_cols, TabCol{.tab_name = order_item->cols->tab_name,
+                                                              .col_name = order_item->cols->col_name});
+                sort_key.desc = order_item->orderby_dir == ast::OrderBy_DESC;
+                query->sort_keys.push_back(sort_key);
+            }
+        }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {
         if (!sm_manager_->db_.is_table(x->tab_name)) {
             throw TableNotFoundError(x->tab_name);
