@@ -30,7 +30,8 @@ class IndexScanExecutor : public AbstractExecutor {
     IndexMeta index_meta_;                      // index scan涉及到的索引元数据
 
     Rid rid_;
-    std::unique_ptr<RecScan> scan_;
+    std::vector<Rid> rids_;
+    size_t cursor_;
 
     SmManager *sm_manager_;
 
@@ -65,16 +66,45 @@ class IndexScanExecutor : public AbstractExecutor {
     }
 
     void beginTuple() override {
-        
+        rids_ = sm_manager_->scan_index(tab_name_, index_col_names_, fed_conds_, context_);
+        cursor_ = 0;
+        while (cursor_ < rids_.size()) {
+            rid_ = rids_[cursor_];
+            auto rec = fh_->get_record(rid_, context_);
+            if (eval_conditions(cols_, fed_conds_, rec.get())) {
+                return;
+            }
+            cursor_++;
+        }
     }
 
     void nextTuple() override {
-        
+        if (is_end()) {
+            return;
+        }
+        cursor_++;
+        while (cursor_ < rids_.size()) {
+            rid_ = rids_[cursor_];
+            auto rec = fh_->get_record(rid_, context_);
+            if (eval_conditions(cols_, fed_conds_, rec.get())) {
+                return;
+            }
+            cursor_++;
+        }
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        return nullptr;
+        if (is_end()) {
+            return nullptr;
+        }
+        rid_ = rids_[cursor_];
+        return fh_->get_record(rid_, context_);
     }
+
+    bool is_end() const override { return cursor_ >= rids_.size(); }
+    size_t tupleLen() const override { return len_; }
+    const std::vector<ColMeta> &cols() const override { return cols_; }
+    ColMeta get_col_offset(const TabCol &target) override { return *get_col(cols_, target); }
 
     Rid &rid() override { return rid_; }
 };

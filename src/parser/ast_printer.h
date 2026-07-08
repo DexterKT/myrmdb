@@ -46,6 +46,8 @@ private:
                 {SV_TYPE_INT,    "INT"},
                 {SV_TYPE_FLOAT,  "FLOAT"},
                 {SV_TYPE_STRING, "STRING"},
+                {SV_TYPE_BIGINT, "BIGINT"},
+                {SV_TYPE_DATETIME, "DATETIME"},
         };
         return m.at(type);
     }
@@ -79,6 +81,9 @@ private:
             std::cout << "HELP\n";
         } else if (auto x = std::dynamic_pointer_cast<ShowTables>(node)) {
             std::cout << "SHOW_TABLES\n";
+        } else if (auto x = std::dynamic_pointer_cast<ShowIndex>(node)) {
+            std::cout << "SHOW_INDEX\n";
+            print_val(x->tab_name, offset);
         } else if (auto x = std::dynamic_pointer_cast<CreateTable>(node)) {
             std::cout << "CREATE_TABLE\n";
             print_val(x->tab_name, offset);

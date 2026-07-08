@@ -40,6 +40,8 @@ class UpdateExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> Next() override {
         for (const auto &rid : rids_) {
             auto rec = fh_->get_record(rid, context_);
+            auto old_rec = std::make_unique<RmRecord>(rec->size);
+            memcpy(old_rec->data, rec->data, rec->size);
             for (auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
                 if (!set_clause.rhs.coerce_to(col->type)) {
@@ -50,6 +52,7 @@ class UpdateExecutor : public AbstractExecutor {
                 }
                 memcpy(rec->data + col->offset, set_clause.rhs.raw->data, col->len);
             }
+            sm_manager_->update_index_entries(tab_name_, old_rec.get(), rec.get(), rid);
             fh_->update_record(rid, rec->data, context_);
         }
         return nullptr;

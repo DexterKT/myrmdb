@@ -10,10 +10,14 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <map>
+#include <vector>
+
 #include "index/ix.h"
 #include "record/rm_file_handle.h"
 #include "sm_defs.h"
 #include "sm_meta.h"
+#include "common/common.h"
 #include "common/context.h"
 
 class Context;
@@ -31,10 +35,21 @@ class SmManager {
     std::unordered_map<std::string, std::unique_ptr<RmFileHandle>> fhs_;    // file name -> record file handle, 当前数据库中每张表的数据文件
     std::unordered_map<std::string, std::unique_ptr<IxIndexHandle>> ihs_;   // file name -> index file handle, 当前数据库中每个索引的文件
    private:
+    struct RuntimeIndexEntry {
+        std::string key;
+        Rid rid;
+    };
+
+    struct RuntimeIndex {
+        IndexMeta meta;
+        std::vector<RuntimeIndexEntry> entries;
+    };
+
     DiskManager* disk_manager_;
     BufferPoolManager* buffer_pool_manager_;
     RmManager* rm_manager_;
     IxManager* ix_manager_;
+    std::map<std::string, RuntimeIndex> runtime_indexes_;
 
    public:
     SmManager(DiskManager* disk_manager, BufferPoolManager* buffer_pool_manager, RmManager* rm_manager,
@@ -77,4 +92,31 @@ class SmManager {
     void drop_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context);
     
     void drop_index(const std::string& tab_name, const std::vector<ColMeta>& col_names, Context* context);
+
+    void show_index(const std::string& tab_name, Context* context);
+
+    std::vector<Rid> scan_index(const std::string& tab_name, const std::vector<std::string>& col_names,
+                                const std::vector<Condition>& conds, Context* context);
+
+    void check_index_insert(const std::string& tab_name, const RmRecord* rec, const Rid* self = nullptr);
+
+    void insert_index_entries(const std::string& tab_name, const RmRecord* rec, const Rid& rid);
+
+    void delete_index_entries(const std::string& tab_name, const RmRecord* rec, const Rid& rid);
+
+    void update_index_entries(const std::string& tab_name, const RmRecord* old_rec, const RmRecord* new_rec,
+                              const Rid& rid);
+
+   private:
+    std::string runtime_index_name(const std::string& tab_name, const std::vector<std::string>& col_names) const;
+    std::string runtime_index_name(const IndexMeta& index) const;
+    std::string make_index_key(const IndexMeta& index, const RmRecord* rec) const;
+    int compare_index_key(const IndexMeta& index, const std::string& lhs, const std::string& rhs,
+                          int col_num = -1) const;
+    bool key_equal(const IndexMeta& index, const std::string& lhs, const std::string& rhs) const;
+    void sort_runtime_index(RuntimeIndex& runtime_index);
+    void rebuild_runtime_index(const IndexMeta& index, Context* context);
+    void rebuild_runtime_indexes(Context* context);
+    RuntimeIndex& get_runtime_index(const std::string& tab_name, const std::vector<std::string>& col_names);
+    const RuntimeIndex& get_runtime_index(const std::string& tab_name, const std::vector<std::string>& col_names) const;
 };
