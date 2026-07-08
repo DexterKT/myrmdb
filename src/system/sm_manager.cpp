@@ -85,7 +85,26 @@ void SmManager::drop_db(const std::string& db_name) {
  * @param {string&} db_name 数据库名称，与文件夹同名
  */
 void SmManager::open_db(const std::string& db_name) {
-    
+    if (!is_dir(db_name)) {
+        throw DatabaseNotFoundError(db_name);
+    }
+    if (chdir(db_name.c_str()) < 0) {
+        throw UnixError();
+    }
+
+    std::ifstream ifs(DB_META_NAME);
+    if (!ifs.is_open()) {
+        throw FileNotFoundError(DB_META_NAME);
+    }
+    db_ = DbMeta();
+    ifs >> db_;
+    ifs.close();
+
+    fhs_.clear();
+    ihs_.clear();
+    for (auto &entry : db_.tabs_) {
+        fhs_.emplace(entry.first, rm_manager_->open_file(entry.first));
+    }
 }
 
 /**
@@ -101,7 +120,15 @@ void SmManager::flush_meta() {
  * @description: 关闭数据库并把数据落盘
  */
 void SmManager::close_db() {
-    
+    flush_meta();
+    for (auto &entry : fhs_) {
+        rm_manager_->close_file(entry.second.get());
+    }
+    fhs_.clear();
+    ihs_.clear();
+    if (chdir("..") < 0) {
+        throw UnixError();
+    }
 }
 
 /**
@@ -188,7 +215,17 @@ void SmManager::create_table(const std::string& tab_name, const std::vector<ColD
  * @param {Context*} context
  */
 void SmManager::drop_table(const std::string& tab_name, Context* context) {
-    
+    if (!db_.is_table(tab_name)) {
+        throw TableNotFoundError(tab_name);
+    }
+    auto fh = fhs_.find(tab_name);
+    if (fh != fhs_.end()) {
+        rm_manager_->close_file(fh->second.get());
+        fhs_.erase(fh);
+    }
+    rm_manager_->destroy_file(tab_name);
+    db_.tabs_.erase(tab_name);
+    flush_meta();
 }
 
 /**
